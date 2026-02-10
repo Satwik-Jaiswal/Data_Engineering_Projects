@@ -1,0 +1,67 @@
+import pandas as pd
+import logging 
+from sqlalchemy import create_engine 
+
+logging.basicConfig(
+    filename="Sales_etl.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+try:
+    read_df=pd.read_csv(r"C:\Users\Shreyansh\Desktop\Streamlit\Python_Learning\Sales_Data_Project_1\Raw_sales_data.csv")
+    logging.info("Raw_sales_data.csv read successfully")
+except Exception  as e:
+    logging.error(f"Error:{e}")
+
+print(read_df)
+
+#handling duplicates 
+read_df[read_df.duplicated()]    # to know which row is duplicate 
+trans_df=read_df.drop_duplicates().copy()
+logging.info("Successfully removed duplicates")
+
+#checking for null values 
+#print(list(read_df.columns))
+missing_columns=read_df.loc[:,['order_id', 'order_date', 
+                               'customer_id', 'customer_name', 
+                               'product_id', 'product_name', 
+                               'quantity', 'price']].isna().sum()
+for column,count in missing_columns.items():
+    if count>0:
+        logging.warning(f"found missing values in COLUMN_NAME--{column} number of missing values--{count} ")
+
+#handling null values
+
+for col, count in missing_columns.items():
+    if count > 0:
+        if col == "customer_name":
+            trans_df[col] = trans_df[col].mask(trans_df[col].isna(), "Unknown")
+            logging.info(f"Filled missing values in {col} with 'Unknown'")
+
+        elif col == "quantity":
+            trans_df[col] = trans_df[col].mask(trans_df[col].isna(), 1)
+            logging.info(f"Filled missing values in {col} with 1")
+
+        elif col == "price":
+            trans_df[col] = trans_df[col].mask(trans_df[col].isna(), 100)
+            logging.info(f"Filled missing values in {col} with 100")
+
+
+#load data into database 
+     
+engine = create_engine(
+    "mysql+pymysql://root:1234512345@localhost:3306/sales_db"
+)
+
+try:
+    trans_df.to_sql(
+    name="sales_data",     # table name
+    con=engine,
+    if_exists="replace",   # replace / append
+    index=False
+)
+    logging.info("SUCCESS :Database has been created and data is loaded to sales_db table")
+except Exception as e:
+    logging.error(f"ERROR:{e}")
+
